@@ -46,6 +46,7 @@ GOJIRA_DETACH_UP=${GOJIRA_DETACH_UP:-"--detach"}
 GOJIRA_MODE=${GOJIRA_MODE:-dev}
 GOJIRA_NETWORK_MODE=${GOJIRA_NETWORK_MODE}
 GOJIRA_TARGET=${GOJIRA_TARGET:-kong}
+GOJIRA_APT_MIRROR=${GOJIRA_APT_MIRROR:-"none"}
 
 # Feature flags. Use the new cool stuff by default. Set it off to the ancient
 # one if it does not work for you
@@ -259,6 +260,10 @@ function parse_args {
         GOJIRA_NETWORK_MODE=$2
         shift
         ;;
+      --apt-mirror)
+        GOJIRA_APT_MIRROR=$2
+        shift
+        ;;
       -)
         _EXTRA_ARGS+=("$(cat $2)")
         _RAW_INPUT=1
@@ -460,6 +465,7 @@ Options:
   --egg                 add a compose egg to make things extra yummy
   --network-mode        set docker network mode
   --yml FILE            kong yml file
+  --apt-mirror DOMAIN   use customized Ubuntu apt mirror (such as --apt-mirror apt-mirror.example.com)
   -V,  --verbose        echo every command that gets executed
   -h,  --help           display this help
 
@@ -559,6 +565,7 @@ function image_name {
     KONG_LIBGMP=${GMP_VERSION:-$(req_find $req_file KONG_GMP_VERSION)}
     KONG_LIBNETTLE=${NETTLE_VERSION:-$(req_find $req_file KONG_DEP_NETTLE_VERSION)}
     KONG_LIBJQ=${JQ_VERSION:-$(req_find $req_file KONG_DEP_LIBJQ_VERSION)}
+    RESTY_LMDB=${RESTY_LMDB:-$(req_find $req_file RESTY_LMDB_VERSION)}
   fi
 
   if [[ -f $yaml_file ]]; then
@@ -566,6 +573,7 @@ function image_name {
     LUAROCKS=${LUAROCKS:-$(yaml_find $yaml_file LUAROCKS)}
     OPENSSL=${OPENSSL:-$(yaml_find $yaml_file OPENSSL)}
     BORINGSSL=${BORINGSSL:-$(yaml_find $yaml_file BORINGSSL)}
+    RESTY_LMDB=${RESTY_LMDB:-$(yaml_find $yaml_file RESTY_LMDB)}
   fi
 
   if [[ -z $LUAROCKS || -z "${OPENSSL}${BORINGSSL}" || -z $OPENRESTY ]]; then
@@ -616,6 +624,11 @@ function image_name {
       "libjq-$KONG_LIBJQ"
     )
   fi
+  if [[ -n "$RESTY_LMDB" ]]; then
+    components+=(
+      "resty-lmdb-$RESTY_LMDB"
+    )
+  fi
 
   read -r components_sha rest <<<"$(IFS="-" ; echo -n "${components[*]}" | shasum)"
   GOJIRA_IMAGE=gojira:$components_sha
@@ -638,6 +651,7 @@ function build {
     "--label KONG_NGX_MODULE=$KONG_NGX_MODULE"
     "--build-arg KONG_BUILD_TOOLS=$KONG_BUILD_TOOLS"
     "--label KONG_BUILD_TOOLS=$KONG_BUILD_TOOLS"
+    "--build-arg APT_MIRROR=$GOJIRA_APT_MIRROR"
   )
 
   ssl_provider=" * OpenSSL:     $OPENSSL  "
@@ -654,6 +668,13 @@ function build {
   >&2 echo " * LuaRocks:    $LUAROCKS "
   >&2 echo " * Kong NM:     $KONG_NGX_MODULE"
   >&2 echo " * Kong BT:     $KONG_BUILD_TOOLS"
+  if [[ -n "$RESTY_LMDB" ]]; then
+    BUILD_ARGS+=(
+      "--build-arg RESTY_LMDB=$RESTY_LMDB"
+      "--label RESTY_LMDB=$RESTY_LMDB"
+    )
+    >&2 echo " * Resty LMDB:  $RESTY_LMDB"
+  fi
   if [[ -n "$KONG_GO_PLUGINSERVER" ]] || [[ -n "$BORINGSSL" ]]; then
     BUILD_ARGS+=(
       "--build-arg GO_VERSION=$GO_VERSION"
@@ -720,6 +741,14 @@ function executable {
     return 0
   else
     return 1
+  fi
+}
+
+
+function cleanup {
+  local pids=`jobs -p`
+  if [[ "$pids" != "" ]]; then
+    kill $pids
   fi
 }
 
@@ -1061,3 +1090,4 @@ pushd() { builtin pushd $1 > /dev/null; }
 popd() { builtin popd > /dev/null; }
 
 main "$@"
+cleanup   # make sure we clean up

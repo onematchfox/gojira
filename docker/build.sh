@@ -51,10 +51,18 @@ function make_kong_ngx_module {
 }
 
 function make_libgmp {
+  local machine
+  machine="$(uname -m)"
+
+  local build_arg="--build=x86_64-linux-gnu"
+  if [[ "$machine" == "aarch64" ]] || [[ "$machine" == "arm64" ]]; then
+    build_arg=""
+  fi
+
   (
     cd "${LIBGMP_INSTALL}" || return
     ./configure \
-      --build=x86_64-linux-gnu \
+      "$build_arg" \
       --enable-static=no \
       --prefix="${LIBGMP_INSTALL}"
     make install
@@ -94,6 +102,8 @@ function build {
     flags+=("--boringssl ${BORINGSSL}")
   else
     flags+=("--openssl   ${OPENSSL}")
+  if [[ ! -z "${RESTY_LMDB}" ]]; then
+    flags+=("--resty-lmdb ${RESTY_LMDB}")
   fi
 
   local after=()

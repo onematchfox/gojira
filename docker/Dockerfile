@@ -2,6 +2,13 @@ FROM ubuntu:bionic
 
 ENV DEBIAN_FRONTEND noninteractive
 
+ARG APT_MIRROR=none
+
+RUN if [ ${APT_MIRROR} != none ] ; then \
+        sed -i s/ports.ubuntu.com/${APT_MIRROR}/ /etc/apt/sources.list ; \
+        apt-get clean all ; \
+    fi
+
 # Build tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -43,6 +50,7 @@ ARG KONG_GO_PLUGINSERVER
 ARG KONG_LIBGMP
 ARG KONG_LIBNETTLE
 ARG KONG_LIBJQ
+ARG RESTY_LMDB
 
 ENV BUILD_PREFIX=/build
 ENV OPENSSL_INSTALL=${BUILD_PREFIX}/openssl
