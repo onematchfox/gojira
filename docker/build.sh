@@ -102,6 +102,7 @@ function build {
     flags+=("--boringssl ${BORINGSSL}")
   else
     flags+=("--openssl   ${OPENSSL}")
+  fi
   if [[ ! -z "${RESTY_LMDB}" ]]; then
     flags+=("--resty-lmdb ${RESTY_LMDB}")
   fi
